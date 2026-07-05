@@ -34,7 +34,7 @@ Inheriting a legacy PHP codebase usually means: no docs, no tests, procedural en
 ## Install
 
 ```bash
-git clone https://github.com/<you>/legacy-php-analyzer
+git clone https://github.com/mestepa12/legacy-php-analyzer
 cd legacy-php-analyzer
 composer install
 ```
