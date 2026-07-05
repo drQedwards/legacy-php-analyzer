@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Legacy PHP Analyzer — Report</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1f2733; --muted: #67707e;
+    --line: #dde2e8; --accent: #3567a6;
+    --dead-high: #c0392b; --dead-medium: #d68910; --dead-low: #b7950b;
+    --k-class: #4e79a7; --k-interface: #59a14f; --k-trait: #b07aa1;
+    --k-enum: #76b7b2; --k-function: #d4a72c; --k-global: #9c755f; --k-external: #a8a29a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: #22303f; color: #fff; padding: 18px 28px; }
+  header h1 { margin: 0 0 4px; font-size: 20px; }
+  header .sub { color: #aebbc9; font-size: 13px; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 28px 60px; }
+  section { margin-top: 26px; }
+  h2 { font-size: 17px; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-top: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  .card .num { font-size: 24px; font-weight: 600; }
+  .card .lbl { color: var(--muted); font-size: 12.5px; }
+  .warn { background: #fdf3e0; border: 1px solid #ecc98a; border-radius: 8px; padding: 10px 14px; margin-top: 14px; }
+  .warn ul { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; }
+  #graph { height: 72vh; min-height: 460px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin-top: 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; font-size: 13.5px; }
+  .controls input[type=text] { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; min-width: 260px; }
+  .controls button { padding: 6px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); cursor: pointer; }
+  .controls button:hover { border-color: var(--accent); color: var(--accent); }
+  .edge-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  .edge-filters label { cursor: pointer; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 12.5px; color: var(--muted); align-items: center; }
+  .legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .legend .dead-sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #fff; margin-right: 5px; vertical-align: -1px; }
+  .tbl-wrap { overflow-x: auto; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { cursor: pointer; user-select: none; background: #eef1f5; white-space: nowrap; }
+  th .dir { color: var(--accent); }
+  tr:last-child td { border-bottom: 0; }
+  td.mono, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11.5px; color: #fff; }
+  .pill.high { background: var(--dead-high); } .pill.medium { background: var(--dead-medium); } .pill.low { background: var(--dead-low); }
+  .table-filter { padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; min-width: 260px; margin-top: 10px; }
+  .empty { color: var(--muted); font-style: italic; margin-top: 10px; }
+  details.cls { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; margin-top: 8px; }
+  details.cls summary { cursor: pointer; font-weight: 600; }
+  details.cls summary .kind { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  details.cls .summary-text { color: var(--muted); margin: 6px 0; }
+  details.cls .method { border-top: 1px dashed var(--line); padding: 7px 0; }
+  details.cls .method .sig { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  details.cls .method .doc { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  details.cls .inh { color: var(--accent); font-size: 12px; }
+  .covbar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; margin-top: 6px; }
+  .covbar > div { height: 100%; background: var(--k-interface); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Legacy PHP Analyzer</h1>
+  <div class="sub" id="meta-line"></div>
+</header>
+<main>
+
+<section id="stats-section">
+  <div class="cards" id="stat-cards"></div>
+  <div id="parse-errors"></div>
+</section>
+
+<section>
+  <h2>Dependency graph</h2>
+  <div class="controls">
+    <input type="text" id="node-search" list="node-names" placeholder="Search a node…">
+    <datalist id="node-names"></datalist>
+    <button id="isolate-btn" title="Show only the matched node and its direct neighbours">Isolate</button>
+    <button id="reset-btn">Reset view</button>
+    <label><input type="checkbox" id="physics-toggle"> Physics</label>
+    <span id="layout-note" style="color:var(--muted)"></span>
+  </div>
+  <div class="edge-filters" id="edge-filters"></div>
+  <div class="legend" id="legend"></div>
+  <div id="graph"></div>
+</section>
+
+<section>
+  <h2>Dead code</h2>
+  <input type="text" class="table-filter" id="dead-filter" placeholder="Filter findings…">
+  <div class="tbl-wrap">
+    <table id="dead-table">
+      <thead><tr><th>Identifier</th><th>Type</th><th>Confidence</th><th>Location</th><th>Reason</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="empty" id="dead-empty" hidden>No dead code found.</p>
+</section>
+
+<section>
+  <h2>Documentation discrepancies</h2>
+  <input type="text" class="table-filter" id="disc-filter" placeholder="Filter discrepancies…">
+  <div class="tbl-wrap">
+    <table id="disc-table">
+      <thead><tr><th>Location</th><th>Kind</th><th>Detail</th><th>File</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="empty" id="disc-empty" hidden>No discrepancies found.</p>
+</section>
+
+<section>
+  <h2>Generated documentation</h2>
+  <div id="coverage"></div>
+  <div id="docs"></div>
+</section>
+
+</main>
+
+<script>__VIS_NETWORK_JS__</script>
+<script>
+'use strict';
+const DATA = __ANALYSIS_JSON__;
+
+/* ---------- tiny DOM helper (textContent only: no injection) ---------- */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'class') el.className = v; else el.setAttribute(k, v);
+  }
+  for (const c of children) {
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+
+/* ------------------------------- header ------------------------------- */
+document.getElementById('meta-line').textContent =
+  DATA.meta.analyzedPath + ' — generated ' + DATA.meta.generatedAt +
+  ' — schema v' + DATA.meta.schemaVersion +
+  ' — ' + DATA.meta.tool.name + ' ' + DATA.meta.tool.version;
+
+/* ------------------------------ stat cards ------------------------------ */
+const dc = DATA.deadCode;
+const cov = DATA.docs.coverage;
+const deadTotal = dc.classes.length + dc.methods.length + dc.functions.length;
+const cards = [
+  [DATA.meta.filesScanned, 'files scanned'],
+  [DATA.graph.nodes.length, 'graph nodes'],
+  [DATA.graph.edges.length, 'graph edges'],
+  [deadTotal, 'dead code findings'],
+  [DATA.docs.discrepancies.length, 'doc discrepancies'],
+  [cov.methodsTotal ? Math.round(100 * cov.methodsDocumented / cov.methodsTotal) + '%' : '—', 'methods documented'],
+];
+const cardsBox = document.getElementById('stat-cards');
+for (const [num, lbl] of cards) {
+  cardsBox.append(h('div', {class: 'card'}, h('div', {class: 'num'}, num), h('div', {class: 'lbl'}, lbl)));
+}
+
+if (DATA.errors.length > 0) {
+  const box = h('div', {class: 'warn'},
+    '⚠ ' + DATA.errors.length + ' file(s) could not be parsed and were NOT analyzed:');
+  const ul = h('ul', {});
+  for (const e of DATA.errors) ul.append(h('li', {class: 'mono'}, e.file + ' — ' + e.message));
+  box.append(ul);
+  document.getElementById('parse-errors').append(box);
+}
+
+/* -------------------------------- graph -------------------------------- */
+const KIND_COLORS = {
+  class: '#4e79a7', interface: '#59a14f', trait: '#b07aa1', enum: '#76b7b2',
+  function: '#d4a72c', global: '#9c755f', external: '#a8a29a',
+};
+const CONF_COLORS = {high: '#c0392b', medium: '#d68910', low: '#b7950b'};
+
+const deadByName = new Map();
+for (const s of dc.classes) deadByName.set(s.identifier.toLowerCase(), s.confidence);
+
+function shortLabel(name, kind) {
+  if (kind === 'global') return '(global scope)';
+  if (kind === 'function') return name.slice('function:'.length) + '()';
+  return name.split('\\').pop();
+}
+
+const visNodes = DATA.graph.nodes.map(n => {
+  const dead = deadByName.get(n.name.toLowerCase());
+  return {
+    id: n.name,
+    label: shortLabel(n.name, n.kind),
+    title: n.name + ' [' + n.kind + (dead ? ' — DEAD (' + dead + ' confidence)' : '') + ']',
+    shape: n.kind === 'global' ? 'diamond' : (n.kind === 'function' ? 'box' : 'dot'),
+    size: 14,
+    color: {
+      background: KIND_COLORS[n.kind] || '#888',
+      border: dead ? CONF_COLORS[dead] : '#39434f',
+      highlight: {background: KIND_COLORS[n.kind] || '#888', border: '#111'},
+    },
+    borderWidth: dead ? 4 : 1,
+    shapeProperties: {borderDashes: n.kind === 'external' ? [4, 3] : false},
+    font: {size: 12, color: '#1f2733'},
+  };
+});
+
+const visEdges = DATA.graph.edges.map((e, i) => ({
+  id: 'e' + i,
+  from: e.from,
+  to: e.to,
+  arrows: 'to',
+  etype: e.type,
+  title: e.type + (e.member ? ' :: ' + e.member : '') + ' @ ' + e.file + ':' + e.line,
+  color: {color: '#8b97a5', opacity: 0.7},
+  smooth: {type: 'continuous'},
+}));
+
+const nodesDS = new vis.DataSet(visNodes);
+const edgesDS = new vis.DataSet(visEdges);
+
+/* Scale rule: small graphs get physics; big ones (> 150 nodes) start
+   with a hierarchical layout and physics off to stay responsive. */
+const BIG = visNodes.length > 150;
+const network = new vis.Network(
+  document.getElementById('graph'),
+  {nodes: nodesDS, edges: edgesDS},
+  {
+    physics: {enabled: !BIG, barnesHut: {gravitationalConstant: -6000, springLength: 140}},
+    layout: BIG ? {hierarchical: {enabled: true, direction: 'UD', sortMethod: 'hubsize', levelSeparation: 130}} : {},
+    interaction: {hover: true, tooltipDelay: 120},
+  }
+);
+document.getElementById('physics-toggle').checked = !BIG;
+document.getElementById('layout-note').textContent =
+  BIG ? '(' + visNodes.length + ' nodes: hierarchical layout, physics off by default)' : '';
+
+document.getElementById('physics-toggle').addEventListener('change', ev => {
+  network.setOptions({physics: {enabled: ev.target.checked}});
+});
+
+/* search + isolate */
+const datalist = document.getElementById('node-names');
+for (const n of visNodes) datalist.append(h('option', {value: n.id}));
+
+function findNode(text) {
+  if (!text) return null;
+  const q = text.toLowerCase();
+  let node = visNodes.find(n => n.id.toLowerCase() === q);
+  if (!node) node = visNodes.find(n => n.id.toLowerCase().includes(q));
+  return node ? node.id : null;
+}
+
+document.getElementById('node-search').addEventListener('change', ev => {
+  const id = findNode(ev.target.value);
+  if (id) {
+    network.selectNodes([id]);
+    network.focus(id, {scale: 1.1, animation: true});
+  }
+});
+
+document.getElementById('isolate-btn').addEventListener('click', () => {
+  const id = findNode(document.getElementById('node-search').value)
+    || network.getSelectedNodes()[0];
+  if (!id) return;
+  const keep = new Set([id, ...network.getConnectedNodes(id)]);
+  nodesDS.update(visNodes.map(n => ({id: n.id, hidden: !keep.has(n.id)})));
+  network.fit({animation: true});
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  nodesDS.update(visNodes.map(n => ({id: n.id, hidden: false})));
+  network.unselectAll();
+  network.fit({animation: true});
+});
+
+/* edge type filters */
+const typeCounts = {};
+for (const e of visEdges) typeCounts[e.etype] = (typeCounts[e.etype] || 0) + 1;
+const filtersBox = document.getElementById('edge-filters');
+for (const type of Object.keys(typeCounts).sort()) {
+  const cb = h('input', {type: 'checkbox', checked: ''});
+  cb.checked = true;
+  cb.addEventListener('change', () => {
+    edgesDS.update(visEdges.filter(e => e.etype === type).map(e => ({id: e.id, hidden: !cb.checked})));
+  });
+  filtersBox.append(h('label', {}, cb, ' ' + type + ' (' + typeCounts[type] + ')'));
+}
+
+/* legend (mandatory): kind colors + dead-border confidence samples */
+const legend = document.getElementById('legend');
+legend.append(h('strong', {}, 'Legend:'));
+for (const [kind, color] of Object.entries(KIND_COLORS)) {
+  const sw = h('span', {class: 'sw'});
+  sw.style.background = color;
+  legend.append(h('span', {}, sw, kind));
+}
+for (const [conf, color] of Object.entries(CONF_COLORS)) {
+  const sw = h('span', {class: 'dead-sw'});
+  sw.style.border = '3px solid ' + color;
+  legend.append(h('span', {}, sw, 'dead (' + conf + ')'));
+}
+
+/* ------------------------- filterable, sortable tables ------------------------- */
+function fillTable(tableId, emptyId, rows) {
+  const tbody = document.querySelector('#' + tableId + ' tbody');
+  for (const row of rows) {
+    const tr = h('tr', {});
+    for (const cell of row) tr.append(cell);
+    tbody.append(tr);
+  }
+  if (rows.length === 0) {
+    document.getElementById(emptyId).hidden = false;
+    document.getElementById(tableId).closest('.tbl-wrap').hidden = true;
+  }
+}
+
+function makeFilterable(inputId, tableId) {
+  document.getElementById(inputId).addEventListener('input', ev => {
+    const q = ev.target.value.toLowerCase();
+    for (const tr of document.querySelectorAll('#' + tableId + ' tbody tr')) {
+      tr.hidden = q !== '' && !tr.textContent.toLowerCase().includes(q);
+    }
+  });
+}
+
+function makeSortable(tableId) {
+  const headers = document.querySelectorAll('#' + tableId + ' th');
+  headers.forEach((th, col) => th.addEventListener('click', () => {
+    const asc = th.dataset.dir !== 'asc';
+    headers.forEach(x => { delete x.dataset.dir; x.querySelector('.dir')?.remove(); });
+    th.dataset.dir = asc ? 'asc' : 'desc';
+    th.append(h('span', {class: 'dir'}, asc ? ' ▲' : ' ▼'));
+    const tbody = document.querySelector('#' + tableId + ' tbody');
+    [...tbody.rows]
+      .sort((a, b) => {
+        const av = a.cells[col].textContent, bv = b.cells[col].textContent;
+        const an = parseFloat(av), bn = parseFloat(bv);
+        const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+        return asc ? cmp : -cmp;
+      })
+      .forEach(r => tbody.append(r));
+  }));
+}
+
+const deadRows = [...dc.classes, ...dc.methods, ...dc.functions].map(s => [
+  h('td', {class: 'mono'}, s.identifier),
+  h('td', {}, s.type),
+  h('td', {}, h('span', {class: 'pill ' + s.confidence}, s.confidence)),
+  h('td', {class: 'mono'}, s.file + ':' + s.line),
+  h('td', {}, s.reason),
+]);
+fillTable('dead-table', 'dead-empty', deadRows);
+makeFilterable('dead-filter', 'dead-table');
+makeSortable('dead-table');
+
+const discRows = DATA.docs.discrepancies.map(d => [
+  h('td', {class: 'mono'}, d.location),
+  h('td', {}, d.kind),
+  h('td', {}, d.detail),
+  h('td', {class: 'mono'}, d.file + ':' + d.line),
+]);
+fillTable('disc-table', 'disc-empty', discRows);
+makeFilterable('disc-filter', 'disc-table');
+makeSortable('disc-table');
+
+/* ------------------------------ documentation ------------------------------ */
+const covBox = document.getElementById('coverage');
+const pct = cov.methodsTotal ? Math.round(100 * cov.methodsDocumented / cov.methodsTotal) : 0;
+covBox.append(
+  h('div', {}, 'Method docblock coverage: ' + cov.methodsDocumented + '/' + cov.methodsTotal +
+    ' — classes: ' + cov.classLikesDocumented + '/' + cov.classLikesTotal +
+    ' — functions: ' + cov.functionsDocumented + '/' + cov.functionsTotal),
+);
+const bar = h('div', {class: 'covbar'}, h('div', {}));
+bar.firstChild.style.width = pct + '%';
+covBox.append(bar);
+
+const docsBox = document.getElementById('docs');
+for (const cls of DATA.docs.classes) {
+  const det = h('details', {class: 'cls'});
+  const sum = h('summary', {}, cls.fqcn + ' ', h('span', {class: 'kind'}, '[' + cls.kind + '] ' + cls.file + ':' + cls.line));
+  det.append(sum);
+  if (cls.summary) det.append(h('div', {class: 'summary-text'}, cls.summary));
+  for (const m of cls.methods) {
+    const meth = h('div', {class: 'method'},
+      h('div', {class: 'sig'}, m.visibility + (m.static ? ' static' : '') + ' ' + m.signature));
+    if (m.summary) meth.append(h('div', {class: 'doc'}, m.summary));
+    if (m.inheritedFrom) meth.append(h('div', {class: 'inh'}, 'doc inherited from ' + m.inheritedFrom));
+    det.append(meth);
+  }
+  docsBox.append(det);
+}
+for (const fn of DATA.docs.functions) {
+  const det = h('details', {class: 'cls'});
+  det.append(h('summary', {}, fn.fqn + '() ', h('span', {class: 'kind'}, '[function] ' + fn.file + ':' + fn.line)));
+  if (fn.summary) det.append(h('div', {class: 'summary-text'}, fn.summary));
+  det.append(h('div', {class: 'method'}, h('div', {class: 'sig'}, fn.signature)));
+  docsBox.append(det);
+}
+</script>
+</body>
+</html>

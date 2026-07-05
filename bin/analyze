@@ -1,0 +1,17 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Works both as a repo checkout (vendor/ next to bin/) and installed
+// as a Composer dependency (autoload three levels up).
+foreach ([__DIR__ . '/../vendor/autoload.php', __DIR__ . '/../../../autoload.php'] as $autoload) {
+    if (file_exists($autoload)) {
+        require $autoload;
+        break;
+    }
+}
+
+use LegacyAnalyzer\Cli\AnalyzeCommand;
+
+exit((new AnalyzeCommand(STDOUT, STDERR))->run($argv));

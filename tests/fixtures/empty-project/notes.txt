@@ -1,0 +1,1 @@
+Directory intentionally without PHP files: exercises exit code 2.

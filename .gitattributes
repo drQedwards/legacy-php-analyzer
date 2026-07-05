@@ -1,0 +1,8 @@
+# Normalize line endings across Windows/Linux/Mac clones.
+* text=auto
+
+# The CLI entry point must keep LF: a CRLF shebang breaks on Linux.
+bin/analyze text eol=lf
+
+# Vendored minified bundle: keep byte-exact, don't diff it.
+resources/vendor/*.min.js -diff text eol=lf
