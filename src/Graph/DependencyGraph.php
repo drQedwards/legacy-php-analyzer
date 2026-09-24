@@ -37,6 +37,8 @@ final class DependencyGraph
         $this->nodes[strtolower($node->name)] ??= $node;
     }
 
+    // Stored once, indexed both ways: "who uses X?" (dead code) and
+    // "what does X use?" are both answered without scanning all edges.
     public function addEdge(Edge $edge): void
     {
         $index = count($this->edges);

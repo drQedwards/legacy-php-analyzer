@@ -1,37 +1,67 @@
 # Legacy PHP Analyzer
 
-CLI tool that takes an **undocumented legacy PHP project** and gives you, in one run:
+![PHP](https://img.shields.io/badge/PHP-8.2%2B-777BB4?logo=php&logoColor=white)
+![nikic/php-parser](https://img.shields.io/badge/nikic%2Fphp--parser-5.x-4F5B93)
+![PHPUnit](https://img.shields.io/badge/PHPUnit-11-3C9CD7)
+![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen)
+![vis-network](https://img.shields.io/badge/vis--network-9.1.9-2B7CE9)
+![Composer](https://img.shields.io/badge/Composer-ready-885630?logo=composer&logoColor=white)
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
-1. **A dependency map** between classes — inheritance, interfaces, traits, `new X()`, static calls, type hints, `catch` types, `instanceof` checks, `X::class` references.
-2. **Dead code detection** — never-referenced classes, unreachable private/protected methods, never-called functions, each with an honest confidence level.
-3. **Auto-generated documentation** — built from existing PHPDoc + real signatures, including detection of docblocks that lie about the code.
+A CLI tool for the first day on an **undocumented legacy PHP codebase**. Before you change anything you need to know three things: what exists, what depends on what, and what can safely be deleted. This tool answers all three with static analysis and never runs the code it analyzes.
 
-Output: structured **JSON** (consumable by other tools) and a **standalone interactive HTML report** with a navigable dependency graph — a single file that opens offline, no server, no build step.
+One run gives you:
 
-> Pure PHP 8.2+, no framework. AST analysis via [nikic/php-parser](https://github.com/nikic/PHP-Parser) — no regex parsing anywhere.
+1. **A dependency map** between classes: inheritance, interfaces, traits, `new X()`, static calls, type hints, `catch` types, `instanceof` checks and `X::class` references.
+2. **Dead code detection**: classes nobody references, private/protected methods nobody calls and functions nobody calls. Each finding has a confidence level (`high` / `medium` / `low`) and a reason.
+3. **Generated documentation** built from the existing PHPDoc and the real signatures. It also flags **docblocks that no longer match the code**.
+
+Results come out as **JSON** that other tools can read, plus a **self-contained interactive HTML report** with a navigable dependency graph. The report is one file that opens offline with no server and no build step.
+
+> Plain PHP 8.2+ with no framework. Parsing is done on the AST with [nikic/php-parser](https://github.com/nikic/PHP-Parser); nothing is parsed with regex.
 
 ---
+
+## Demo
+
+This is a command-line tool, so there is no hosted demo. The screenshots below come from a **real run** against [`sebastianbergmann/phpunit-mock-objects`](https://github.com/sebastianbergmann/phpunit-mock-objects), an archived legacy library (45 files, 67 graph nodes, 211 edges).
+
+To make your own report:
+
+```bash
+php bin/analyze /path/to/any-php-project --html=report.html
+# then open report.html in a browser
+```
 
 ## Screenshots
 
-<!-- TODO: replace with real captures. Generate a report against a real
-     project (e.g. an abandoned WordPress plugin), open it in a browser
-     and capture:
-       docs/screenshots/graph.png       — the dependency graph with the legend
-       docs/screenshots/dead-code.png   — the dead code table, filtered
-       docs/screenshots/discrepancies.png — doc discrepancies
--->
-| Dependency graph | Dead code | Doc discrepancies |
-|---|---|---|
-| ![Graph](docs/screenshots/graph.png) | ![Dead code](docs/screenshots/dead-code.png) | ![Discrepancies](docs/screenshots/discrepancies.png) |
+**Dependency graph.** You can filter edges by type, search a node and isolate it with its neighbours. Dead code is outlined by confidence level. Files that fail to parse are reported, not silently skipped.
+
+![Dependency graph](docs/screenshots/graph.png)
+
+**Dead code.** Every finding comes with a confidence level and the reason for it.
+
+![Dead code findings](docs/screenshots/dead-code.png)
+
+**Documentation discrepancies.** Places where the docblock and the real signature disagree.
+
+![Documentation discrepancies](docs/screenshots/discrepancies.png)
 
 ---
 
-## Why
+## Tech stack
 
-Inheriting a legacy PHP codebase usually means: no docs, no tests, procedural entry points, three naming conventions, and nobody left who knows why `helpers2_old.php` exists. Before touching anything you need to know **what exists, what talks to what, and what is safe to delete**. This tool answers those three questions from static analysis alone — it never executes the analyzed code.
+| Area | Choice | Why |
+|------|--------|-----|
+| Language | **PHP 8.2+** | readonly classes and properties, enums, first-class callables |
+| Parsing | **nikic/php-parser 5** + `NameResolver` | an exact AST even for messy legacy code; tolerates syntax errors file by file |
+| Graph UI | **vis-network 9.1.9** (vendored) | inlined into the report so it works fully offline |
+| Tests | **PHPUnit 11** | 74 tests / 220 assertions against purpose-built fixture projects |
+| Packaging | **Composer** (PSR-4, `bin` entry) | works as a standalone clone or as a dependency |
 
-## Install
+## Install and run locally
+
+**Requirements:** PHP ≥ 8.2 and Composer.
 
 ```bash
 git clone https://github.com/mestepa12/legacy-php-analyzer
@@ -39,37 +69,36 @@ cd legacy-php-analyzer
 composer install
 ```
 
-Requires PHP ≥ 8.2 (readonly properties, enums). Also installable as a Composer dependency: the binary is declared in `bin` and autoload paths resolve both layouts.
-
-## Usage
-
 ```bash
-# JSON to stdout (machine-clean: summary goes to stderr)
+# JSON to stdout. The summary goes to stderr, so pipes stay clean
 php bin/analyze /path/to/legacy-project | jq .deadCode
 
-# Everything to files, pretty JSON, full parse-error listing
+# Everything to files: pretty JSON + HTML report + list of files that failed to parse
 php bin/analyze /path/to/legacy-project \
     --output=analysis.json --html=report.html --pretty --verbose
 
-# Skip extra directories (ADDS to the defaults, never replaces them)
+# Skip extra directories (these are ADDED to the defaults: vendor, node_modules, .git, .svn, cache)
 php bin/analyze /path/to/legacy-project --exclude=cache,storage
 
 # CI gate: fail the pipeline when dead code appears
 php bin/analyze src/ --fail-on-dead-code
+
+# Run the test suite
+composer test
 ```
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Analysis completed — findings or not, a finding is the tool working |
+| `0` | Analysis finished. Findings don't make it fail; finding things is the tool's job |
 | `1` | Invalid usage (unknown flag, missing path) |
-| `2` | Path not found / no PHP files / cannot write output |
-| `3` | Dead code found — **only** with `--fail-on-dead-code` |
+| `2` | Path not found, no PHP files, or the output can't be written |
+| `3` | Dead code found. **Only** with `--fail-on-dead-code` |
 
 ### JSON output
 
-Top-level shape (`meta.schemaVersion` is bumped on breaking changes — consumers key off it instead of guessing):
+Consumers should check `meta.schemaVersion` instead of guessing the format. It goes up on every breaking change.
 
 ```jsonc
 {
@@ -85,7 +114,11 @@ Top-level shape (`meta.schemaVersion` is bumped on breaking changes — consumer
 }
 ```
 
-## How it works
+---
+
+## Technical highlights
+
+### Architecture: one parse, immutable phases
 
 ```
 project dir ──► ProjectParser (php-parser + NameResolver, error-tolerant)
@@ -102,37 +135,39 @@ project dir ──► ProjectParser (php-parser + NameResolver, error-tolerant)
                                └─► HtmlReporter ──► report.html (self-contained)
 ```
 
-Each phase only consumes the previous phase's immutable output — the AST is never touched again after parsing.
+Each file's AST is walked once. After that, every phase reads only the previous phase's immutable output.
 
-## Design decisions worth knowing
+### Getting the details right
 
-- **`leaveNode` vs `enterNode`**: `NameResolver` resolves names as the traverser *enters* each node. A visitor reading **child** data from a class node must collect on `leaveNode` (children resolved by then); a visitor reading the node's **own** resolved names can use `enterNode`. Both patterns are used, deliberately, and commented in the code.
-- **Case-insensitive symbol tables**: PHP class/function names are case-insensitive; legacy `new USER()` must match `class User`. All lookups are lowercased, original names preserved for display.
-- **Static call taxonomy**: `Foo::m()` → edge with member; `Foo::$m()` → edge to the class, member unknown; `$var::m()` → **no edge**, recorded as a dynamic reference. Inventing an edge there would make the graph lie.
-- **Trait dead-code closure**: a trait method's usage scope is the transitive closure over trait-uses-trait chains and consumer-class inheritance, pruned per-method by `insteadof`; an `as` alias counts as usage. Protected methods use the full hierarchy *family* (ancestors included — template-method hooks are dispatched from parent code).
-- **Magic methods are never dead-code candidates**: the engine invokes them implicitly; a `private __construct` behind a static factory is a pattern, not dead code.
-- **Function resolution order**: an unqualified `foo()` inside `namespace App` records candidates `[App\foo, \foo]` and only the **first declared one** counts as called — a shadowed global function is correctly reported dead.
-- **Doc-type normalization before comparison**: `?string` ≡ `string|null`, `integer` ≡ `int`, `Dog[]` refines `array` (not a mismatch), `$this` ≡ `static` ≡ `self`, class names compared by short name (docblocks are never namespace-resolved). `{@inheritdoc}` is resolved through `extends → implements → traits` and the inherited doc is compared against the **override's real signature**.
-- **stdout is machine-only**: JSON to stdout, every human message to stderr. `analyze proj | jq .` just works.
-- **The HTML report is truly standalone**: vis-network 9.1.9 is vendored in-repo (`resources/vendor/`, provenance documented) and inlined at generation time — string concatenation, no build step, zero network on open. Embedded JSON uses `JSON_HEX_TAG`, so analyzed code containing `</script>` cannot break the report.
+- **Visitor ordering in the AST.** `NameResolver` resolves names as the traverser *enters* each node. So `SymbolCollector` builds classes on `leaveNode`, when their children are already resolved, and `DependencyVisitor` works on `enterNode`, because it only needs the node's own names. The two patterns are used on purpose and the reasons are commented in the code.
+- **Case-insensitive symbol tables.** PHP class and function names ignore case, so legacy `new USER()` must match `class User`. Every lookup is lowercased and the original names are kept for display.
+- **No invented edges.** `Foo::m()` becomes an edge with a member. `Foo::$m()` becomes an edge to the class with the member unknown. `$var::m()` produces **no edge** and is recorded as a dynamic reference instead, because guessing would make the graph wrong.
+- **Traits in dead code detection.** A trait method's usage scope is the transitive closure over trait-uses-trait chains and the classes consuming them, pruned per method by `insteadof`. An `as` alias counts as usage. For protected methods the scope is the whole hierarchy (ancestors call template-method hooks through `$this`).
+- **Function resolution matches PHP.** Inside `namespace App`, an unqualified `foo()` has two candidates, `[App\foo, \foo]`, and only the **first one that is declared** counts as called. That is how a shadowed global function correctly shows up as dead.
+- **Doc types are normalized before comparing.** `?string` ≡ `string|null`, `integer` ≡ `int`, `Dog[]` counts as a refinement of `array` rather than a mismatch, and `$this` ≡ `static` ≡ `self`. `{@inheritdoc}` is resolved through `extends → implements → traits`, and the inherited doc is checked against the **override's real signature**.
+- **stdout is for machines only.** JSON goes to stdout and every human-readable message goes to stderr, so `analyze proj | jq .` just works. The CLI takes its streams by injection, which lets the tests run it end to end through `php://memory`.
+- **The HTML report doesn't depend on anything.** vis-network is vendored (provenance in `resources/vendor/`) and inlined at generation time by plain string concatenation. The embedded JSON uses `JSON_HEX_TAG`, so analyzed code that contains `</script>` can't break the report.
+- **Broken files are reported, not fatal.** A file with a syntax error is recorded and skipped, and the rest of the project is still analyzed.
 
-## Limitations (known and deliberate)
+### Testing
 
-- **Flat analysis, no reachability**: calls inside a dead method still keep their targets "alive". Reachability from entry points would be stricter but requires knowing the entry points — impossible for libraries. Findings are per-symbol references, not a liveness proof.
-- **Dynamic PHP is a blind spot — surfaced, not hidden**: `new $class`, `$obj->$method()`, `call_user_func`, string callables in configs are statically unresolvable. Instead of pretending, the tool counts them (`dynamicReferenceCounts`) and downgrades finding confidence (`high`/`medium`/`low`, with the concrete counter-evidence in `reason`).
-- **Physical directory scan, not autoload mapping**: files are discovered by walking the tree (`.php` extension), not by resolving Composer/PSR-4 maps. Fine for legacy projects — which rarely have reliable autoload maps — but conditionally-loaded duplicated class names collide (last parsed wins).
-- **Docblock class types compared by short name**: without resolving `use` statements inside docblocks, `Dog` vs `App\Dog` must be assumed equal. Trades a class of false positives for a small class of false negatives (two same-named classes in different namespaces).
-- **Public symbols are never reported dead**: they may be entry points for code outside the analyzed tree. Only private/protected methods and project-local functions/classes qualify.
-- **Anonymous classes** have no graph node; their dependencies are attributed to the enclosing scope.
+`composer test` runs **74 tests / 220 assertions**. They exercise the real pipeline against purpose-built fixture projects in `tests/fixtures/`:
 
-## Testing
+- a small legacy app with one broken file and a `vendor/` decoy
+- a dead code stress test: trait chains, `insteadof`, template-method hooks, magic constructors
+- a documentation drift project with every kind of discrepancy, plus the false-positive cases that must stay silent
 
-```bash
-composer test        # PHPUnit, 74 tests / 220 assertions
-```
+The CLI is tested end to end, covering exit codes, which stream each message goes to, and the JSON schema.
 
-The suite runs the real pipeline against three purpose-built fixture projects (`tests/fixtures/`): a mini legacy app with a broken file and a `vendor/` decoy, a dead-code gauntlet (trait chains, `insteadof`, template-method hooks, magic constructors), and a documentation-drift project (every discrepancy kind, plus the false-positive cases that must stay silent). The CLI is tested end-to-end through in-memory streams — exit codes, stream discipline and JSON schema included.
+## Known limitations (by design)
+
+- **Flat analysis, no reachability.** A call inside a dead method still keeps its target alive. Real reachability would need known entry points, which libraries don't have.
+- **Dynamic PHP is a blind spot, and the tool says so.** `new $class`, `$obj->$method()` and `call_user_func` can't be resolved statically. The tool counts them (`dynamicReferenceCounts`) and lowers the confidence of affected findings.
+- **Files are found by walking the directory tree**, not through Composer/PSR-4 maps. That suits legacy projects, but when two conditionally loaded files declare the same class, the last one parsed wins.
+- **Docblock class types are compared by short name**, because `use` imports inside docblocks aren't resolved.
+- **Public symbols are never reported as dead**, because code outside the analyzed tree may call them.
+- **Anonymous classes** get no graph node of their own. Their dependencies are attributed to the enclosing scope.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The vendored vis-network bundle is MIT/Apache-2.0 dual-licensed; provenance in [resources/vendor/README.md](resources/vendor/README.md).
+MIT, see [LICENSE](LICENSE). The vendored vis-network bundle is dual-licensed MIT/Apache-2.0; provenance is in [resources/vendor/README.md](resources/vendor/README.md).

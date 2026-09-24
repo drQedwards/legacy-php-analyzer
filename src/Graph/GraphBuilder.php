@@ -69,6 +69,8 @@ final class GraphBuilder
         return $graph;
     }
 
+    // Unknown targets become placeholder nodes, not errors: vendor and
+    // built-in classes are real dependencies, just outside the project.
     private function ensureNode(DependencyGraph $graph, string $name): void
     {
         if ($graph->node($name) !== null) {

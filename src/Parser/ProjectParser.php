@@ -90,6 +90,9 @@ final class ProjectParser
                 continue;
             }
 
+            // One traversal, three visitors: NameResolver runs first on
+            // every node so both collectors see resolved names, and each
+            // AST is walked once instead of three times.
             $collector = new SymbolCollector($relativePath);
             $dependencyVisitor = new DependencyVisitor($relativePath);
             $traverser = new NodeTraverser();
@@ -121,7 +124,12 @@ final class ProjectParser
         );
     }
 
-    /** @return iterable<SplFileInfo> */
+    /**
+     * Excluded directories are pruned at directory level, so vendor/
+     * and friends are never even descended into.
+     *
+     * @return iterable<SplFileInfo>
+     */
     private function phpFiles(string $root): iterable
     {
         $dirIterator = new RecursiveDirectoryIterator(

@@ -128,6 +128,11 @@ final class DeadCodeDetector
 
     // --- index construction ----------------------------------------------
 
+    /**
+     * Precomputes every lookup once: the per-method verdicts below run
+     * for each candidate, so they must be hash hits, not rescans of the
+     * full reference lists. Reset first so the detector can be reused.
+     */
     private function buildIndexes(ParseResult $result, DependencyGraph $graph): void
     {
         $this->classes = [];
@@ -209,6 +214,8 @@ final class DeadCodeDetector
 
     // --- classes -----------------------------------------------------------
 
+    // Self-references (recursion, `new self` factories) don't count: a
+    // class that only talks to itself is still unreachable from outside.
     private function isDeadClass(ClassLikeInfo $classLike, DependencyGraph $graph): bool
     {
         foreach ($graph->edgesTo($classLike->fqcn) as $edge) {
@@ -220,6 +227,8 @@ final class DeadCodeDetector
         return true;
     }
 
+    // Any unresolved `new $x` / `$x::m()` could be targeting this class,
+    // so a "no references" verdict cannot claim high confidence.
     private function classConfidence(): Confidence
     {
         $relevant = ['new', 'static-call', 'static-property', 'class-const', 'instanceof'];
@@ -235,6 +244,8 @@ final class DeadCodeDetector
 
     // --- methods -----------------------------------------------------------
 
+    // Public methods are never candidates: they may be called from
+    // outside the analyzed tree (entry points, templates, other packages).
     private function isCandidate(MethodInfo $method): bool
     {
         return $method->visibility !== Visibility::PublicVis
@@ -333,6 +344,10 @@ final class DeadCodeDetector
     }
 
     /**
+     * Downgrades by the strongest counter-evidence found: a same-name
+     * call on an untyped receiver is the likeliest false positive, a
+     * project-wide dynamic call the vaguest one.
+     *
      * @param  array<string, true> $callNames
      * @param  array<string, true> $staticTargets
      * @return array{0: Confidence, 1: string}
@@ -538,12 +553,17 @@ final class DeadCodeDetector
 
     // --- misc ----------------------------------------------------------------
 
+    // Names arrive with or without a leading `\` and in any case (PHP
+    // symbols are case-insensitive): one canonical key for every index.
     private function key(string $name): string
     {
         return strtolower(ltrim($name, '\\'));
     }
 
     /**
+     * File/line order keeps the output deterministic, so two runs over
+     * the same project produce diffable JSON.
+     *
      * @param  list<DeadSymbol> $symbols
      * @return list<DeadSymbol>
      */

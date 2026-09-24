@@ -28,6 +28,8 @@ final class Codebase
 
     private int $fileCount = 0;
 
+    // Last write wins on duplicate FQCNs: legacy code often declares
+    // the same class in conditionally-included files (known limitation).
     public function addClassLike(ClassLikeInfo $classLike): void
     {
         $this->classLikes[strtolower($classLike->fqcn)] = $classLike;

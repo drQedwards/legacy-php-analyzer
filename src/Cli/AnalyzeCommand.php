@@ -50,6 +50,9 @@ final class AnalyzeCommand
         TXT;
 
     /**
+     * Streams are injected instead of using STDOUT/STDERR so tests can
+     * drive the full CLI through php://memory and assert on both.
+     *
      * @param resource $stdout
      * @param resource $stderr
      */

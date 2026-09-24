@@ -66,6 +66,8 @@ final class SymbolCollector extends NodeVisitorAbstract
         return $this->functions;
     }
 
+    // Flattens the four class-like node types into one ClassLikeInfo
+    // shape so later phases never branch on AST node classes.
     private function buildClassLike(Stmt\ClassLike $node): ClassLikeInfo
     {
         [$kind, $isAbstract, $isFinal, $extends, $implements] = match (true) {
@@ -207,6 +209,7 @@ final class SymbolCollector extends NodeVisitorAbstract
         return $result;
     }
 
+    // null = the `as` alias keeps the method's original visibility.
     private static function visibilityFromModifier(?int $modifier): ?Visibility
     {
         return match ($modifier) {

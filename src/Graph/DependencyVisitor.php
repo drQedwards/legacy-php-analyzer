@@ -291,6 +291,10 @@ final class DependencyVisitor extends NodeVisitorAbstract
         $this->functionCalls[] = new FunctionCallRef($candidates, $this->file, $node->getStartLine());
     }
 
+    // Without type inference the receiver of `$obj->m()` is unknown:
+    // only `$this->` calls can be attributed to a class. The rest are
+    // kept by name so dead-code can lower its confidence instead of
+    // guessing a target.
     private function handleMethodCall(Expr\MethodCall|Expr\NullsafeMethodCall $node): void
     {
         if (!$node->name instanceof Node\Identifier) {
@@ -323,7 +327,12 @@ final class DependencyVisitor extends NodeVisitorAbstract
         }
     }
 
-    /** @return list<Node\Name> */
+    /**
+     * Only Node\Name is returned: scalar types (int, string, ...) are
+     * Identifier nodes, so built-ins never turn into graph edges.
+     *
+     * @return list<Node\Name>
+     */
     private function classNamesInType(?Node $type): array
     {
         if ($type instanceof Node\NullableType) {

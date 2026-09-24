@@ -312,7 +312,12 @@ final class DocGenerator
 
     // --- rendering ---------------------------------------------------------------
 
-    /** @param list<ParamInfo> $params */
+    /**
+     * Defaults are rendered as `…`: the docs describe the contract, and
+     * printing arbitrary default expressions would need a pretty-printer.
+     *
+     * @param list<ParamInfo> $params
+     */
     private function renderSignature(string $name, array $params, ?string $returnType): string
     {
         $rendered = [];
@@ -330,6 +335,9 @@ final class DocGenerator
     }
 
     /**
+     * The real signature type wins; the docblock only fills the gaps
+     * left by untyped legacy parameters.
+     *
      * @param  list<ParamInfo> $params
      * @return list<ParamDoc>
      */
